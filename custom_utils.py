@@ -9,7 +9,6 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
 path = 'ClimbingHoldDetection-15/train'
-
 with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
     file = json.loads(f.read())
     images = file['images']
@@ -48,6 +47,8 @@ def extractAllImages(interval, img_id_to_annotations, annotations, images, path 
     for i in tqdm(interval):
         getBoudingBoxForImage(i, img_id_to_annotations, annotations, images, saving_dir="extractedLabeledDataset")
 
+
+
 class CustomImageDataset(Dataset):
     def __init__(self, annotations, img_dir, transform=None):
         # self.img_labels = pd.read_csv(annotations_file)
@@ -75,7 +76,7 @@ class CustomImageDataset(Dataset):
 
         return image, label
 
-def get_data(img_dir, annotations, batch_size=2, shuffle=False):
+def get_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
         transforms.Resize((64, 64))
     ])
@@ -85,4 +86,12 @@ def get_data(img_dir, annotations, batch_size=2, shuffle=False):
     return train_dataloader
 
 def get_annotations():
-    return annotations
+    with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
+        file = json.loads(f.read())
+        annotations = file['annotations']
+        return annotations
+
+if __name__ == "__main__":
+    img_id_to_annotations=parse_annotations(annotations)
+    extractAllImages(range(382), img_id_to_annotations, annotations, images, path = 'ClimbingHoldDetection-15/train', saving_dir=None)
+
