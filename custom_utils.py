@@ -52,7 +52,9 @@ def parse_annotations(annotations):
 
     return img_id_to_annotations
 
-def getBoudingBoxForImage(imageId, img_id_to_annotations, annotations, images, path = 'ClimbingHoldDetection-15/train', saving_dir=None):
+def getBoudingBoxForImage(imageId, img_id_to_annotations, annotations, images, path, saving_dir=None):
+    # import pdb
+    # pdb.set_trace()
     annotation_ids = img_id_to_annotations[imageId]
     img_path =  os.path.join(path, images[imageId]['file_name'])
 
@@ -64,10 +66,13 @@ def getBoudingBoxForImage(imageId, img_id_to_annotations, annotations, images, p
         if saving_dir:
             cv2.imwrite(os.path.join(saving_dir, f"{imageId:05d}_{a_id:05d}.png"), extracted_img)
 
-def extractAllImages(interval, img_id_to_annotations, annotations, images, path = 'ClimbingHoldDetection-15/train', saving_dir=None):
+def extractAllImages(interval, img_id_to_annotations, annotations, images, path, saving_dir=None):
     from tqdm import tqdm
     for i in tqdm(interval):
-        getBoudingBoxForImage(i, img_id_to_annotations, annotations, images, saving_dir="extractedLabeledDataset")
+        if i in img_id_to_annotations:
+            getBoudingBoxForImage(i, img_id_to_annotations, annotations, images, path, saving_dir=saving_dir)
+        # else:
+        #     print(str(i)+ " not in annotations")
 
 
 
@@ -114,6 +119,7 @@ class UnlabeledImageDataset(Dataset):
             image = self.transform(image)
 
         return image
+    
 def get_labeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
         transforms.Resize((64, 64))
@@ -155,6 +161,15 @@ def augmentAndPredict(model, images , k, num_classes, transforms):
     return all_augmented_inputs, all_preds
 
 if __name__ == "__main__":
-    img_id_to_annotations=parse_annotations(labeled_annotations)
-    extractAllImages(range(382), img_id_to_annotations, labeled_annotations, labeled_images, path = 'ClimbingHoldDetection-15/train', saving_dir=None)
+    
+    labeled_img_id_to_annotations=parse_annotations(labeled_annotations)
+    labeled_data_saving_dir = "LabeledData"
+    num_labeled_images = len(labeled_images)
+    extractAllImages(range(num_labeled_images), labeled_img_id_to_annotations, labeled_annotations, labeled_images, path = labeled_path, saving_dir=labeled_data_saving_dir)
+
+
+    unlabeled_img_id_to_annotations=parse_annotations(unlabeled_annotations)
+    unlabeled_data_saving_dir = "UnlabeledData"
+    num_unlabeled_images = len(unlabeled_images)
+    extractAllImages(range(num_unlabeled_images), unlabeled_img_id_to_annotations, unlabeled_annotations, unlabeled_images, path = unlabeled_path, saving_dir=unlabeled_data_saving_dir)
 
