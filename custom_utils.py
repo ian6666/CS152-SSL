@@ -132,15 +132,22 @@ def get_unlabeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
         transforms.Resize((64, 64))
     ])
-    unlabeled_dataset = UnlabeledImageDataset(annotations, img_dir, 5, transform=transform)
+    unlabeled_dataset = UnlabeledImageDataset(annotations, img_dir, transform=transform)
     unlabeled_dataloader = DataLoader(unlabeled_dataset, batch_size=batch_size, shuffle=shuffle)
     return unlabeled_dataloader
 
-def get_annotations():
+def get_labeled_annotations():
     with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
         file = json.loads(f.read())
-        annotations = file['annotations']
-        return annotations
+        labeled_annotations = file['annotations']
+        return labeled_annotations
+
+def get_unlabeled_annotations():
+    with open("Climbing-Holds-and-Volumes-14/train/_annotations.coco.json") as f:
+        unlabeled_file = json.loads(f.read())
+        unlabeled_annotations = unlabeled_file['annotations']
+        return unlabeled_annotations
+    
 
 def augmentAndPredict(model, images , k, num_classes, transforms):
     """
