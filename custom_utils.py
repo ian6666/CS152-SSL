@@ -3,16 +3,38 @@ import numpy as np
 import cv2
 import os
 import pandas as pd
+import torch
 from torchvision.io import read_image
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
+from torch.nn.functional import one_hot
 
-path = 'ClimbingHoldDetection-15/train'
+labeled_path = 'ClimbingHoldDetection-15/train'
 with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
-    file = json.loads(f.read())
-    images = file['images']
-    annotations = file['annotations']
+    labeled_file = json.loads(f.read())
+    labeled_images = labeled_file['images']
+    labeled_annotations = labeled_file['annotations']
+
+unlabeled_path = "Climbing-Holds-and-Volumes-14/train/"
+with open("Climbing-Holds-and-Volumes-14/train/_annotations.coco.json") as f:
+    unlabeled_file = json.loads(f.read())
+    unlabeled_images = unlabeled_file['images']
+    unlabeled_annotations = unlabeled_file['annotations']
+    
+
+# Used to make new json file
+def deleteCategoryID(annotations, category_id):
+    new_annotations = []
+    id = 0
+    for i in range(len(annotations)):
+        if int(annotations[i]['category_id']) != category_id:
+            annotations[i]['id'] = id
+            new_annotations.append(annotations[i])
+            id += 1
+          
+    return new_annotations
+
 
 def extract_bbox(image, bbox_coord):
     x, y, w, h = [int(b) for b in bbox_coord]
@@ -49,7 +71,30 @@ def extractAllImages(interval, img_id_to_annotations, annotations, images, path 
 
 
 
-class CustomImageDataset(Dataset):
+class LabeledImageDataset(Dataset):
+    def __init__(self, annotations, img_dir, num_classes, transform=None):
+        # self.img_labels = pd.read_csv(annotations_file)
+        self.annotations = annotations
+        self.img_dir = img_dir
+        self.transform = transform
+        self.num_classes = num_classes
+    def __len__(self):
+        return len(self.annotations)
+
+    def __getitem__(self, idx):
+        imageId = self.annotations[idx]['image_id']
+        img_path = os.path.join(self.img_dir, f"{imageId:05d}_{idx:05d}.png")
+        
+        image = read_image(img_path)
+        label = self.annotations[idx]['category_id']
+
+        if self.transform:
+            image = self.transform(image)
+
+        one_hot_label = one_hot(torch.tensor(label))
+        return image, one_hot_label
+
+class UnlabeledImageDataset(Dataset):
     def __init__(self, annotations, img_dir, transform=None):
         # self.img_labels = pd.read_csv(annotations_file)
         self.annotations = annotations
@@ -58,32 +103,32 @@ class CustomImageDataset(Dataset):
 
     def __len__(self):
         return len(self.annotations)
-    
+
     def __getitem__(self, idx):
         imageId = self.annotations[idx]['image_id']
         img_path = os.path.join(self.img_dir, f"{imageId:05d}_{idx:05d}.png")
         
-        # error handling
-        if not os.path.exists(img_path):
-            print(f"File not found: {img_path}")
-            return None, None
-        
         image = read_image(img_path)
-        label = self.annotations[idx]['category_id']
 
         if self.transform:
             image = self.transform(image)
 
-        return image, label
-
-def get_data(img_dir, annotations, batch_size=32, shuffle=False):
+        return image
+def get_labeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
         transforms.Resize((64, 64))
     ])
-    trainDataset = CustomImageDataset(annotations, img_dir, transform=transform)
-    train_dataloader = DataLoader(trainDataset, batch_size=batch_size, shuffle=shuffle)
-    train_images, train_labels = next(iter(train_dataloader))
-    return train_dataloader
+    labeled_dataset = LabeledImageDataset(annotations, img_dir, 5, transform=transform)
+    labeled_dataloader = DataLoader(labeled_dataset, batch_size=batch_size, shuffle=shuffle)
+    return labeled_dataloader
+
+def get_unlabeled_data(img_dir, annotations, batch_size=32, shuffle=False):
+    transform = transforms.Compose([
+        transforms.Resize((64, 64))
+    ])
+    unlabeled_dataset = UnlabeledImageDataset(annotations, img_dir, 5, transform=transform)
+    unlabeled_dataloader = DataLoader(unlabeled_dataset, batch_size=batch_size, shuffle=shuffle)
+    return unlabeled_dataloader
 
 def get_annotations():
     with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
@@ -91,7 +136,25 @@ def get_annotations():
         annotations = file['annotations']
         return annotations
 
+def augmentAndPredict(model, images , k, num_classes, transforms):
+    """
+    model: model
+    images: a batch of images
+    k: k transforms
+    transforms: a list of transforms legnth k
+    """
+    batch_size, dims, height, width = images.shape
+    all_augmented_inputs = torch.zeros([k*batch_size, dims, height, width])
+    all_preds =  torch.zeros([k*batch_size, num_classes])
+    for t in range(k):
+        transformed_images = transforms[t](images)
+        preds = model(transformed_images)
+        all_augmented_inputs[t*batch_size:(t+1)*batch_size] = transformed_images
+        all_preds[t*batch_size:(t+1)*batch_size] = preds
+    
+    return all_augmented_inputs, all_preds
+
 if __name__ == "__main__":
-    img_id_to_annotations=parse_annotations(annotations)
-    extractAllImages(range(382), img_id_to_annotations, annotations, images, path = 'ClimbingHoldDetection-15/train', saving_dir=None)
+    img_id_to_annotations=parse_annotations(labeled_annotations)
+    extractAllImages(range(382), img_id_to_annotations, labeled_annotations, labeled_images, path = 'ClimbingHoldDetection-15/train', saving_dir=None)
 
