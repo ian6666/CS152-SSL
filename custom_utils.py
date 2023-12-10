@@ -96,8 +96,8 @@ class LabeledImageDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        one_hot_label = one_hot(torch.tensor(label))
-        return image, one_hot_label
+        # one_hot_label = one_hot(torch.tensor(label))
+        return image, label-1
 
 class UnlabeledImageDataset(Dataset):
     def __init__(self, annotations, img_dir, transform=None):
@@ -161,7 +161,6 @@ def augmentAndPredict(model, images , k, num_classes, transforms):
     return all_augmented_inputs, all_preds
 
 if __name__ == "__main__":
-    
     labeled_img_id_to_annotations=parse_annotations(labeled_annotations)
     labeled_data_saving_dir = "LabeledData"
     num_labeled_images = len(labeled_images)

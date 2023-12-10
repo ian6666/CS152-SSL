@@ -4,9 +4,15 @@ def sharpen(p, T):
     """
     p: prediction probabilities, [Batch, classes]
     T: temperature
+    returns
+    normalized, [Batch, classes]
     """
-    pass
-    # return p_i**(1/T)/(sum(p_j**(1/T)))
+    # p = [[matrix]]
+    powered_p = p.pow(1/T)
+    row_sum = powered_p.sum(dim = 1, keepdim = True)
+    normalized = p/row_sum
+    return normalized
+    
 
 def mixUp(image_1, label_1, image_2, label_2, alpha):
     """
@@ -16,15 +22,11 @@ def mixUp(image_1, label_1, image_2, label_2, alpha):
     returns
     mixed_images, mixed_labels
     """
-
-        # def augment(self, x, l, beta, **kwargs):
-        # del kwargs
-        # mix = tf.distributions.Beta(beta, beta).sample([tf.shape(x)[0], 1, 1, 1])
-        # mix = tf.maximum(mix, 1 - mix)
-        # xmix = x * mix + x[::-1] * (1 - mix)
-        # lmix = l * mix[:, :, 0, 0] + l[::-1] * (1 - mix[:, :, 0, 0])
-        # return xmix, lmix
-    pass
+    l = torch.distributions.beta.Beta(alpha, alpha).sample()
+    l = max(l , 1 - l)
+    x = l * image_1 + (1 - l) * image_2
+    p = l * label_1 + (1 - l) * label_2
+    return x, p
 
 
 def mixMatch(model, X_dataloader_iter, U_dataloader_iter,  batch_size, num_classes, alpha=0.75, T=0.5, K=2):
@@ -57,11 +59,23 @@ def mixMatch(model, X_dataloader_iter, U_dataloader_iter,  batch_size, num_class
     shuffled_indices = torch.randperm(torch.arrange(len(images_W_raw)))
     images_W = images_W_raw[shuffled_indices]
     labels_W = labels_W_raw[shuffled_indices]
-    X_prime = mixUp(images_X,labels_X,  images_W[:len(images_X)], labels_W[:len(images_X)], alpha)
-    U_prime = mixUp(images_U, labels_U, images_W[len(images_X):], labels_W[len(images_X):], alpha)
-    return X_prime, U_prime
-    # 
-    #     pass    # 
+    X_prime, p_X = mixUp(images_X,labels_X,  images_W[:len(images_X)], labels_W[:len(images_X)], alpha)
+    U_prime, p_U = mixUp(images_U, labels_U, images_W[len(images_X):], labels_W[len(images_X):], alpha)
+    return X_prime, p_X, U_prime, p_U
 
 
 #TODO add matchmatch and loss function to training
+def loss(X_prime, U_prime, p_X, p_U, model, num_classes, lambda_U = 100):
+    """
+    X_prime: labeled data
+    U_prime: unlabeled data
+    p_X: probability of X_prime
+    p_U: probability of U_prime
+    (input of this function is the output of mixmatch function)
+    model: model
+    num_classes: a constant (=5)
+    """
+    loss = nn.CrossEntropyLoss()
+    L_X = 1/X_prime.shape[0] * loss(p_X,model(X_prime))
+    L_U = 1/(num_classes * U_prime.shape[0]) * (p_U - model(U_prime))**2.sum()
+    return L_X + L_U * lambda_U
