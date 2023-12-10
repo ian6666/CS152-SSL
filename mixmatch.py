@@ -1,4 +1,12 @@
+import torchvision
+import numpy as np
+import torch.nn as nn
 import torch
+import torch.nn.functional as F
+from torchvision import transforms,models,datasets
+from custom_utils import augmentAndPredict
+import matplotlib.pyplot as plt
+import pdb
 
 def sharpen(p, T):
     """
@@ -7,7 +15,6 @@ def sharpen(p, T):
     returns
     normalized, [Batch, classes]
     """
-    # p = [[matrix]]
     powered_p = p.pow(1/T)
     row_sum = powered_p.sum(dim = 1, keepdim = True)
     normalized = p/row_sum
@@ -29,7 +36,7 @@ def mixUp(image_1, label_1, image_2, label_2, alpha):
     return x, p
 
 
-def mixMatch(model, X_dataloader_iter, U_dataloader_iter,  batch_size, num_classes, alpha=0.75, T=0.5, K=2):
+def mixMatch(model, images_X, labels_X, images_U, batch_size, num_classes, K_transforms, device, alpha, T, K):
     """
     model: model
     iter(X_dataloader): [Batch, 3, 460, 460], [Batch, classes] <- labels
@@ -44,28 +51,29 @@ def mixMatch(model, X_dataloader_iter, U_dataloader_iter,  batch_size, num_class
     X_prime = (mixed_images, mixed_labels) ([batch, 460, 460], [batch, classes])
     U_prime = (mixed_images, mixed_labels)([batch*k, 460, 460], [batch*k, classes])
     """
-    images_X, labels_X = next(X_dataloader_iter)
-    images_U= next(U_dataloader_iter)
+    # images_X, labels_X = next(X_dataloader_iter)
+    # # TODO change labels_X to be one hot
+    # images_U= next(U_dataloader_iter)
 
     # torch.random(dim)
-    raw_labels_U = model(images_U) # [batch*k, classes]
-    raw_labels_U_reshape = raw_labels_U.reshape([batch_size, K, num_classes])
+    # raw_labels_U = model(images_U) # [batch*k, classes]
+    images_U_K, raw_labels_U = augmentAndPredict(model, images_U, K, num_classes, K_transforms, device)
+    raw_labels_U_reshape = raw_labels_U
+    images_U_K = images_U_K.reshape( (K*batch_size, images_U_K.shape[-3], images_U_K.shape[-2], images_U_K.shape[-1]) )
+    # raw_labels_U_reshape = raw_labels_U.reshape([batch_size, K, num_classes])
     avg_labels_U = torch.mean(raw_labels_U_reshape, axis= 1) # check, average over K
     labels_U = sharpen(avg_labels_U, T) # [batch, classes]
-    labels_U_reshape = torch.repeat_interleave(labels_U, K) # to expand back to [batch*k, classes]
-    
-    images_W_raw = torch.concat([images_X, images_U])
+    labels_U_reshape = torch.repeat_interleave(labels_U, K, axis=0) # to expand back to [batch*k, classes]
+    images_W_raw = torch.concat([images_X, images_U_K])
     labels_W_raw = torch.concat([labels_X, labels_U_reshape])
-    shuffled_indices = torch.randperm(torch.arrange(len(images_W_raw)))
+    shuffled_indices = torch.randperm(len(images_W_raw))
     images_W = images_W_raw[shuffled_indices]
     labels_W = labels_W_raw[shuffled_indices]
-    X_prime, p_X = mixUp(images_X,labels_X,  images_W[:len(images_X)], labels_W[:len(images_X)], alpha)
-    U_prime, p_U = mixUp(images_U, labels_U, images_W[len(images_X):], labels_W[len(images_X):], alpha)
+    X_prime, p_X = mixUp(images_X, labels_X,  images_W[:len(images_X)], labels_W[:len(images_X)], alpha)
+    U_prime, p_U = mixUp(images_U_K, labels_U_reshape, images_W[len(images_X):], labels_W[len(images_X):], alpha)
     return X_prime, p_X, U_prime, p_U
 
-
-#TODO add matchmatch and loss function to training
-def loss(X_prime, U_prime, p_X, p_U, model, num_classes, lambda_U = 100):
+def loss(X_prime, U_prime, p_X, p_U, model, num_classes, lambda_U):
     """
     X_prime: labeled data
     U_prime: unlabeled data
@@ -77,5 +85,6 @@ def loss(X_prime, U_prime, p_X, p_U, model, num_classes, lambda_U = 100):
     """
     loss = nn.CrossEntropyLoss()
     L_X = 1/X_prime.shape[0] * loss(p_X,model(X_prime))
-    L_U = 1/(num_classes * U_prime.shape[0]) * (p_U - model(U_prime))**2.sum()
+    L_U = 1/(num_classes * U_prime.shape[0]) * torch.sum((p_U - model(U_prime))**2)
     return L_X + L_U * lambda_U
+

@@ -9,12 +9,25 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from torch.nn.functional import one_hot
+import pdb
 
 labeled_path = 'ClimbingHoldDetection-15/train'
 with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
     labeled_file = json.loads(f.read())
     labeled_images = labeled_file['images']
     labeled_annotations = labeled_file['annotations']
+
+labeled_valid_path = 'ClimbingHoldDetection-15/valid'
+with open('ClimbingHoldDetection-15/valid/_annotations.coco.json') as f:
+    labeled_valid_file = json.loads(f.read())
+    labeled_valid_images = labeled_valid_file['images']
+    labeled_valid_annotations = labeled_valid_file['annotations']
+
+labeled_test_path = 'ClimbingHoldDetection-15/test'
+with open('ClimbingHoldDetection-15/test/_annotations.coco.json') as f:
+    labeled_test_file = json.loads(f.read())
+    labeled_test_images = labeled_test_file['images']
+    labeled_test_annotations = labeled_test_file['annotations']
 
 unlabeled_path = "Climbing-Holds-and-Volumes-14/train/"
 with open("Climbing-Holds-and-Volumes-14/train/_annotations.coco.json") as f:
@@ -53,8 +66,6 @@ def parse_annotations(annotations):
     return img_id_to_annotations
 
 def getBoudingBoxForImage(imageId, img_id_to_annotations, annotations, images, path, saving_dir=None):
-    # import pdb
-    # pdb.set_trace()
     annotation_ids = img_id_to_annotations[imageId]
     img_path =  os.path.join(path, images[imageId]['file_name'])
 
@@ -77,12 +88,12 @@ def extractAllImages(interval, img_id_to_annotations, annotations, images, path,
 
 
 class LabeledImageDataset(Dataset):
-    def __init__(self, annotations, img_dir, num_classes, transform=None):
+    def __init__(self, annotations, img_dir, transform=None):
         # self.img_labels = pd.read_csv(annotations_file)
         self.annotations = annotations
         self.img_dir = img_dir
         self.transform = transform
-        self.num_classes = num_classes
+
     def __len__(self):
         return len(self.annotations)
 
@@ -124,7 +135,7 @@ def get_labeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
         transforms.Resize((64, 64))
     ])
-    labeled_dataset = LabeledImageDataset(annotations, img_dir, 5, transform=transform)
+    labeled_dataset = LabeledImageDataset(annotations, img_dir, transform=transform)
     labeled_dataloader = DataLoader(labeled_dataset, batch_size=batch_size, shuffle=shuffle)
     return labeled_dataloader
 
@@ -136,20 +147,26 @@ def get_unlabeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     unlabeled_dataloader = DataLoader(unlabeled_dataset, batch_size=batch_size, shuffle=shuffle)
     return unlabeled_dataloader
 
-def get_labeled_annotations():
-    with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
+def get_annotations(path):
+    with open(path) as f:
         file = json.loads(f.read())
         labeled_annotations = file['annotations']
         return labeled_annotations
 
-def get_unlabeled_annotations():
-    with open("Climbing-Holds-and-Volumes-14/train/_annotations.coco.json") as f:
-        unlabeled_file = json.loads(f.read())
-        unlabeled_annotations = unlabeled_file['annotations']
-        return unlabeled_annotations
+# def get_labeled_annotations(path='ClimbingHoldDetection-15/train/_annotations.coco.json'):
+#     with open(path) as f:
+#         file = json.loads(f.read())
+#         labeled_annotations = file['annotations']
+#         return labeled_annotations
+
+# def get_unlabeled_annotations(path = "Climbing-Holds-and-Volumes-14/train/_annotations.coco.json"):
+#     with open(path) as f:
+#         unlabeled_file = json.loads(f.read())
+#         unlabeled_annotations = unlabeled_file['annotations']
+#         return unlabeled_annotations
     
 
-def augmentAndPredict(model, images , k, num_classes, transforms):
+def augmentAndPredict(model, images , k, num_classes, transforms, device):
     """
     model: model
     images: a batch of images
@@ -157,25 +174,37 @@ def augmentAndPredict(model, images , k, num_classes, transforms):
     transforms: a list of transforms legnth k
     """
     batch_size, dims, height, width = images.shape
-    all_augmented_inputs = torch.zeros([k*batch_size, dims, height, width])
-    all_preds =  torch.zeros([k*batch_size, num_classes])
+    all_augmented_inputs = torch.zeros([k, batch_size, dims, height, width]).to(device)
+    all_preds =  torch.zeros([k, batch_size, num_classes]).to(device)
     for t in range(k):
         transformed_images = transforms[t](images)
         preds = model(transformed_images)
-        all_augmented_inputs[t*batch_size:(t+1)*batch_size] = transformed_images
-        all_preds[t*batch_size:(t+1)*batch_size] = preds
-    
+        all_augmented_inputs[t] = transformed_images
+        all_preds[t] = preds
+        # all_augmented_inputs[t*batch_size:(t+1)*batch_size] = transformed_images
+        # all_preds[t*batch_size:(t+1)*batch_size] = preds
+    all_augmented_inputs = all_augmented_inputs.permute([1,0,2,3,4])
+    all_preds = all_preds.permute([1,0,2])
     return all_augmented_inputs, all_preds
 
 if __name__ == "__main__":
     labeled_img_id_to_annotations=parse_annotations(labeled_annotations)
-    labeled_data_saving_dir = "LabeledData"
+    labeled_data_saving_dir = "LabeledData/train"
     num_labeled_images = len(labeled_images)
     extractAllImages(range(num_labeled_images), labeled_img_id_to_annotations, labeled_annotations, labeled_images, path = labeled_path, saving_dir=labeled_data_saving_dir)
 
+    labeled_valid_img_id_to_annotations=parse_annotations(labeled_valid_annotations)
+    labeled_valid_data_saving_dir = "LabeledData/valid"
+    num_labeled_valid_images = len(labeled_valid_images)
+    extractAllImages(range(num_labeled_valid_images), labeled_valid_img_id_to_annotations, labeled_valid_annotations, labeled_valid_images, path = labeled_valid_path, saving_dir=labeled_valid_data_saving_dir)
+    
+    labeled_test_img_id_to_annotations=parse_annotations(labeled_test_annotations)
+    labeled_test_data_saving_dir = "LabeledData/test"
+    num_labeled_test_images = len(labeled_test_images)
+    extractAllImages(range(num_labeled_test_images), labeled_test_img_id_to_annotations, labeled_test_annotations, labeled_test_images, path = labeled_test_path, saving_dir=labeled_test_data_saving_dir)
 
-    unlabeled_img_id_to_annotations=parse_annotations(unlabeled_annotations)
-    unlabeled_data_saving_dir = "UnlabeledData"
-    num_unlabeled_images = len(unlabeled_images)
-    extractAllImages(range(num_unlabeled_images), unlabeled_img_id_to_annotations, unlabeled_annotations, unlabeled_images, path = unlabeled_path, saving_dir=unlabeled_data_saving_dir)
+    # unlabeled_img_id_to_annotations=parse_annotations(unlabeled_annotations)
+    # unlabeled_data_saving_dir = "UnlabeledData/train"
+    # num_unlabeled_images = len(unlabeled_images)
+    # extractAllImages(range(num_unlabeled_images), unlabeled_img_id_to_annotations, unlabeled_annotations, unlabeled_images, path = unlabeled_path, saving_dir=unlabeled_data_saving_dir)
 
