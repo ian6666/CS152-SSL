@@ -64,6 +64,7 @@ def mixMatch(model, images_X, labels_X, images_U, batch_size, num_classes, K_tra
     avg_labels_U = torch.mean(raw_labels_U_reshape, axis= 1) # check, average over K
     labels_U = sharpen(avg_labels_U, T) # [batch, classes]
     labels_U_reshape = torch.repeat_interleave(labels_U, K, axis=0) # to expand back to [batch*k, classes]
+    
     images_W_raw = torch.concat([images_X, images_U_K])
     labels_W_raw = torch.concat([labels_X, labels_U_reshape])
     shuffled_indices = torch.randperm(len(images_W_raw))

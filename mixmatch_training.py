@@ -175,6 +175,8 @@ def main(args):
     trial = args.trial
 
     model, _, optimizer = get_model(5, lr)
+    state_dict = torch.load(os.path.join("model_checkpoints", "res", "best_model.pth"))
+    model.load_state_dict(state_dict)
     loss_fn = mixmatch.loss
     val_loss_fn = nn.CrossEntropyLoss()
 

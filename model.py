@@ -105,9 +105,15 @@ if __name__=="__main__":
     model, loss_fn, optimizer = get_model(5,lr=1e-4)
 
     train_losses, train_accuracies = [], []
-    n_epoch = 100
+    val_losses, val_accuracies = [], []
+    n_epoch = 50
 
     print("All losses and accuracies are for each epoch")
+
+    max_accuracy = 0
+    savingPath = os.path.join("model_checkpoints", "res")
+    if not os.path.exists(savingPath):
+        os.makedirs(savingPath)
     for epoch in range(n_epoch):
         train_epoch_losses, train_epoch_accuracies = [], []
         labeled_trn_dl_iter = iter(labeled_dataloader)
@@ -147,10 +153,17 @@ if __name__=="__main__":
             
         val_epoch_loss = np.mean(val_epoch_losses)
         val_epoch_acc = np.mean(val_epoch_accuracies)
+        if val_epoch_acc>max_accuracy:
+            max_accuracy = val_epoch_acc
+            torch.save(model.state_dict(), os.path.join(savingPath, "best_model.pth"))
 
         print(f"Epoch {epoch + 1}/{n_epoch}, Training Loss: {train_epoch_loss:.4f}, Training Accuracy: {train_epoch_accuracy:.4f}, Validation Loss:{val_epoch_loss:.4f}, Validation Accuracy:{val_epoch_acc:4f}")
         train_losses.append(train_epoch_loss)
         train_accuracies.append(train_epoch_accuracy)
+        val_losses.append(val_epoch_loss)
+        val_accuracies.append(val_epoch_acc)
+        result = np.vstack([np.array(train_losses), np.array(train_accuracies), np.array(val_losses), np.array(val_accuracies)])
+        np.save(os.path.join(savingPath, "mixmatch_model_loss.npy"), result)
 
     # epochs = np.arange(5)+1
     # import matplotlib.ticker as mtick

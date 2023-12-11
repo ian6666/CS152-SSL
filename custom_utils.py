@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from torch.nn.functional import one_hot
 import pdb
+from PIL import Image, ImageOps
 
 labeled_path = 'ClimbingHoldDetection-15/train'
 with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
@@ -130,10 +131,60 @@ class UnlabeledImageDataset(Dataset):
             image = self.transform(image)
 
         return image
+
+
+class ResizeAndPad:
+    def __init__(self, desired_size=64):
+        self.desired_size = desired_size
+
+    def __call__(self, img):
+        # Convert PyTorch tensor to PIL Image if necessary
+        if isinstance(img, torch.Tensor):
+            img = transforms.ToPILImage()(img)
+
+        # Calculate the new size, maintaining aspect ratio of the longer side
+        ratio = self.desired_size / max(img.size)
+        new_dimensions = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+
+        # Resize the image
+        img = img.resize(new_dimensions, Image.Resampling.LANCZOS)
+
+        # Determine padding sizes
+        padding_left = (self.desired_size - new_dimensions[0]) // 2
+        padding_right = self.desired_size - new_dimensions[0] - padding_left
+        padding_top = (self.desired_size - new_dimensions[1]) // 2
+        padding_bottom = self.desired_size - new_dimensions[1] - padding_top
+
+        # Create a new image with a compatible color border
+        new_img = Image.new("RGB", (self.desired_size, self.desired_size))
+        new_img.paste(img, (padding_left, padding_top))
+
+        # Get the edge color for padding
+        edge_color_left = img.getpixel((0, 0))
+        edge_color_right = img.getpixel((new_dimensions[0] - 1, 0))
+        edge_color_top = img.getpixel((0, 0))
+        edge_color_bottom = img.getpixel((0, new_dimensions[1] - 1))
+
+        # Fill the padding areas
+        for y in range(self.desired_size):
+            for x in range(padding_left):
+                new_img.putpixel((x, y), edge_color_left)
+            for x in range(self.desired_size - padding_right, self.desired_size):
+                new_img.putpixel((x, y), edge_color_right)
+
+        for x in range(self.desired_size):
+            for y in range(padding_top):
+                new_img.putpixel((x, y), edge_color_top)
+            for y in range(self.desired_size - padding_bottom, self.desired_size):
+                new_img.putpixel((x, y), edge_color_bottom)
+
+        # Convert back to PyTorch tensor
+        return transforms.ToTensor()(new_img)
     
 def get_labeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
-        transforms.Resize((64, 64))
+        # transforms.Resize((64, 64))
+        ResizeAndPad()
     ])
     labeled_dataset = LabeledImageDataset(annotations, img_dir, transform=transform)
     labeled_dataloader = DataLoader(labeled_dataset, batch_size=batch_size, shuffle=shuffle)
