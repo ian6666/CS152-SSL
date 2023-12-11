@@ -12,8 +12,7 @@ import glob
 import matplotlib.pyplot as plt
 from glob import glob
 import torchvision.transforms as transforms
-from custom_utils import get_annotations
-from custom_utils import get_labeled_data
+import custom_utils 
 import pdb
 import os
 
@@ -97,19 +96,22 @@ def predict_proba(x, model):
     return torch.nn.functional.softmax(predictions)
 
 if __name__=="__main__":
-    labeled_json_path = "ClimbingHoldDetection-15/train/_annotations.coco.json"
-    annotations = get_annotations(labeled_json_path)
-    trn_dl = get_labeled_data("LabeledData", annotations)
-    model, loss_fn, optimizer = get_model(5)
+    batch_size = 16
+    labeled_annotations = custom_utils.get_annotations('ClimbingHoldDetection-15/train/_annotations.coco.json')
+    labeled_dataloader = custom_utils.get_labeled_data("LabeledData/train", labeled_annotations, batch_size, False)
+
+    labeled_valid_annotations = custom_utils.get_annotations('ClimbingHoldDetection-15/valid/_annotations.coco.json')
+    labeled_valid_dataloader = custom_utils.get_labeled_data("LabeledData/valid", labeled_valid_annotations, batch_size, False)
+    model, loss_fn, optimizer = get_model(5,lr=1e-4)
 
     train_losses, train_accuracies = [], []
-    n_epoch = 1
+    n_epoch = 100
 
     print("All losses and accuracies are for each epoch")
     for epoch in range(n_epoch):
         train_epoch_losses, train_epoch_accuracies = [], []
-
-        for ix, batch in enumerate(iter(trn_dl)):
+        labeled_trn_dl_iter = iter(labeled_dataloader)
+        for ix, batch in enumerate(labeled_trn_dl_iter):
             try:
                 x, y = batch
                 x, y = x.to(device), y.to(device)
@@ -118,25 +120,35 @@ if __name__=="__main__":
 
                 batch_loss = train_batch(x, y, model, optimizer, loss_fn)
                 train_epoch_losses.append(batch_loss)
+                batch_accuracy = accuracy(x, y, model)
+                train_epoch_accuracies.append(batch_accuracy)
+
             except Exception as e:
                 print(f"An error occurred at batch {ix}: {e}")
                 continue  # Skip this batch
 
         train_epoch_loss = np.array(train_epoch_losses).mean()
+        train_epoch_accuracy = np.mean(train_epoch_accuracies)
+        
 
-        for ix, batch in enumerate(iter(trn_dl)):
+        model.eval()
+        labeled_val_dl_iter = iter(labeled_valid_dataloader)
+        val_epoch_losses, val_epoch_accuracies = [], []
+        for ix, batch in enumerate(labeled_val_dl_iter):
             x, y = batch
             x, y = x.to(device), y.to(device)
             x = x.float()  # Convert to float
             y = y.long()   # Convert to long for classification labels
-            
 
+            batch_loss = loss_fn(model(x),y)
+            val_epoch_losses.append(batch_loss.item())
             batch_accuracy = accuracy(x, y, model)
-            train_epoch_accuracies.append(batch_accuracy)
+            val_epoch_accuracies.append(batch_accuracy)
+            
+        val_epoch_loss = np.mean(val_epoch_losses)
+        val_epoch_acc = np.mean(val_epoch_accuracies)
 
-        train_epoch_accuracy = np.mean(train_epoch_accuracies)
-
-        print(f"Epoch {epoch + 1}/{n_epoch}, Training Loss: {train_epoch_loss:.4f}, Training Accuracy: {train_epoch_accuracy:.4f}")
+        print(f"Epoch {epoch + 1}/{n_epoch}, Training Loss: {train_epoch_loss:.4f}, Training Accuracy: {train_epoch_accuracy:.4f}, Validation Loss:{val_epoch_loss:.4f}, Validation Accuracy:{val_epoch_acc:4f}")
         train_losses.append(train_epoch_loss)
         train_accuracies.append(train_epoch_accuracy)
 

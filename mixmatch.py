@@ -17,7 +17,7 @@ def sharpen(p, T):
     """
     powered_p = p.pow(1/T)
     row_sum = powered_p.sum(dim = 1, keepdim = True)
-    normalized = p/row_sum
+    normalized = powered_p/row_sum
     return normalized
     
 
@@ -83,8 +83,12 @@ def loss(X_prime, U_prime, p_X, p_U, model, num_classes, lambda_U):
     model: model
     num_classes: a constant (=5)
     """
-    loss = nn.CrossEntropyLoss()
-    L_X = 1/X_prime.shape[0] * loss(p_X,model(X_prime))
+    # loss = nn.CrossEntropyLoss()
+    # L_X = 1/X_prime.shape[0] * loss(p_X,model(X_prime))
+    prob1 = F.softmax(p_X, dim=1)
+    prob2 = F.softmax(model(X_prime), dim=1)
+    cross_entropy = -torch.sum(prob1 * torch.log(prob2),dim=1)
+    L_X = torch.mean(cross_entropy)
     L_U = 1/(num_classes * U_prime.shape[0]) * torch.sum((p_U - model(U_prime))**2)
     return L_X + L_U * lambda_U
 

@@ -1,6 +1,6 @@
 import json
 import numpy as np
-import cv2
+# import cv2
 import os
 import pandas as pd
 import torch
@@ -203,8 +203,8 @@ if __name__ == "__main__":
     num_labeled_test_images = len(labeled_test_images)
     extractAllImages(range(num_labeled_test_images), labeled_test_img_id_to_annotations, labeled_test_annotations, labeled_test_images, path = labeled_test_path, saving_dir=labeled_test_data_saving_dir)
 
-    # unlabeled_img_id_to_annotations=parse_annotations(unlabeled_annotations)
-    # unlabeled_data_saving_dir = "UnlabeledData/train"
-    # num_unlabeled_images = len(unlabeled_images)
-    # extractAllImages(range(num_unlabeled_images), unlabeled_img_id_to_annotations, unlabeled_annotations, unlabeled_images, path = unlabeled_path, saving_dir=unlabeled_data_saving_dir)
+    unlabeled_img_id_to_annotations=parse_annotations(unlabeled_annotations)
+    unlabeled_data_saving_dir = "UnlabeledData/train"
+    num_unlabeled_images = len(unlabeled_images)
+    extractAllImages(range(num_unlabeled_images), unlabeled_img_id_to_annotations, unlabeled_annotations, unlabeled_images, path = unlabeled_path, saving_dir=unlabeled_data_saving_dir)
 
