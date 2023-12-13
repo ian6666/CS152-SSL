@@ -2,7 +2,7 @@
 
 Download data from the CS152 server: /cs/cs152/shared/SSL/CS152-SSL/LabeledData and /cs/cs152/shared/SSL/CS152-SSL/UnlabeledData 
 
-Run ``script.sh`` to re-run all of our experiments
+Run ``scripts.sh`` to re-run all of our experiments
 
 Run ``analysis.py`` to obtain our plots
 
