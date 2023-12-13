@@ -4,3 +4,4 @@
 /extractedTestDataset
 /LabeledData
 /UnlabeledData
+/model_checkpoints/*

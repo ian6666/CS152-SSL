@@ -58,7 +58,6 @@ def mixmatch_train_step(model, images_X, labels_X, images_U, loss_fn, optimizer,
     return loss.item()
 
 
-
 def mixmatch_train(model, loss_fn, val_loss_fn, optimizer, n_epoch, labeled_trn_dl, unlabeled_trn_dl, labeled_val_dl, device, batch_size, num_classes, K_transforms, savingPath,  alpha, T, K, lambda_U, trial):
     train_losses, train_accuracies, val_losses, val_accuracies = [], [], [], []
     max_val_accuracy = 0
@@ -193,7 +192,7 @@ def main(args):
             AddGaussianNoise(0., 1.)
         ])
 
-    K_transforms = [transform_1, transform_2]
+    K_transforms = [transform_1, transform_1]
 
     labeled_annotations = custom_utils.get_annotations('ClimbingHoldDetection-15/train/_annotations.coco.json')
     labeled_dataloader = custom_utils.get_labeled_data("LabeledData/train", labeled_annotations, batch_size, False)
@@ -206,8 +205,6 @@ def main(args):
 
     labeled_test_annotations = custom_utils.get_annotations('ClimbingHoldDetection-15/test/_annotations.coco.json')
     labeled_test_dataloader = custom_utils.get_labeled_data("LabeledData/test", labeled_test_annotations, batch_size, False)
-
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     savingPath = "model_checkpoints"

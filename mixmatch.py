@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from torchvision import transforms,models,datasets
-from custom_utils import augmentAndPredict
+from custom_utils import augmentAndPredict, augment
 import matplotlib.pyplot as plt
 import pdb
 
@@ -31,8 +31,16 @@ def mixUp(image_1, label_1, image_2, label_2, alpha):
     """
     l = torch.distributions.beta.Beta(alpha, alpha).sample()
     l = max(l , 1 - l)
+    # l = 1
     x = l * image_1 + (1 - l) * image_2
     p = l * label_1 + (1 - l) * label_2
+    # delete later
+    for i,image in enumerate(x):
+        image = image.permute([1,2,0])
+        plt.imshow(image.cpu())
+        plt.savefig(f"mix_image{i}")
+    import pdb
+    pdb.set_trace()
     return x, p
 
 
@@ -57,6 +65,7 @@ def mixMatch(model, images_X, labels_X, images_U, batch_size, num_classes, K_tra
 
     # torch.random(dim)
     # raw_labels_U = model(images_U) # [batch*k, classes]
+    images_X = augment(images_X, K_transforms)
     images_U_K, raw_labels_U = augmentAndPredict(model, images_U, K, num_classes, K_transforms, device)
     raw_labels_U_reshape = raw_labels_U
     images_U_K = images_U_K.reshape( (K*batch_size, images_U_K.shape[-3], images_U_K.shape[-2], images_U_K.shape[-1]) )
@@ -86,7 +95,9 @@ def loss(X_prime, U_prime, p_X, p_U, model, num_classes, lambda_U):
     """
     # loss = nn.CrossEntropyLoss()
     # L_X = 1/X_prime.shape[0] * loss(p_X,model(X_prime))
-    prob1 = F.softmax(p_X, dim=1)
+    # pdb.set_trace()
+    # prob1 = F.softmax(p_X, dim=1)
+    prob1 = p_X
     prob2 = F.softmax(model(X_prime), dim=1)
     cross_entropy = -torch.sum(prob1 * torch.log(prob2),dim=1)
     L_X = torch.mean(cross_entropy)

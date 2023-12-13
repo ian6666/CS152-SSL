@@ -11,6 +11,8 @@ from torch.utils.data import Dataset
 from torch.nn.functional import one_hot
 import pdb
 from PIL import Image, ImageOps
+import torch.nn.functional as F
+
 
 labeled_path = 'ClimbingHoldDetection-15/train'
 with open('ClimbingHoldDetection-15/train/_annotations.coco.json') as f:
@@ -89,11 +91,12 @@ def extractAllImages(interval, img_id_to_annotations, annotations, images, path,
 
 
 class LabeledImageDataset(Dataset):
-    def __init__(self, annotations, img_dir, transform=None):
+    def __init__(self, annotations, img_dir, transform=None, return_filename=False):
         # self.img_labels = pd.read_csv(annotations_file)
         self.annotations = annotations
         self.img_dir = img_dir
         self.transform = transform
+        self.return_filename = return_filename
 
     def __len__(self):
         return len(self.annotations)
@@ -109,7 +112,10 @@ class LabeledImageDataset(Dataset):
             image = self.transform(image)
 
         # one_hot_label = one_hot(torch.tensor(label))
-        return image, label-1
+        if self.return_filename:
+            return image, label-1, f"{imageId:05d}_{idx:05d}.png"
+        else:
+            return image, label-1
 
 class UnlabeledImageDataset(Dataset):
     def __init__(self, annotations, img_dir, transform=None):
@@ -181,18 +187,20 @@ class ResizeAndPad:
         # Convert back to PyTorch tensor
         return transforms.ToTensor()(new_img)
     
-def get_labeled_data(img_dir, annotations, batch_size=32, shuffle=False):
+def get_labeled_data(img_dir, annotations, batch_size=32, shuffle=False, return_filename=False):
     transform = transforms.Compose([
         # transforms.Resize((64, 64))
-        ResizeAndPad()
+        ResizeAndPad(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-    labeled_dataset = LabeledImageDataset(annotations, img_dir, transform=transform)
+    labeled_dataset = LabeledImageDataset(annotations, img_dir, transform=transform, return_filename=return_filename)
     labeled_dataloader = DataLoader(labeled_dataset, batch_size=batch_size, shuffle=shuffle)
     return labeled_dataloader
 
 def get_unlabeled_data(img_dir, annotations, batch_size=32, shuffle=False):
     transform = transforms.Compose([
-        transforms.Resize((64, 64))
+        ResizeAndPad(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     unlabeled_dataset = UnlabeledImageDataset(annotations, img_dir, transform=transform)
     unlabeled_dataloader = DataLoader(unlabeled_dataset, batch_size=batch_size, shuffle=shuffle)
@@ -216,6 +224,9 @@ def get_annotations(path):
 #         unlabeled_annotations = unlabeled_file['annotations']
 #         return unlabeled_annotations
     
+def augment(images, transforms):
+    transformed_images = transforms[0](images)
+    return transformed_images
 
 def augmentAndPredict(model, images , k, num_classes, transforms, device):
     """
@@ -230,6 +241,7 @@ def augmentAndPredict(model, images , k, num_classes, transforms, device):
     for t in range(k):
         transformed_images = transforms[t](images)
         preds = model(transformed_images)
+        preds = F.softmax(preds, dim=1) # added to change model output to probabilities because it will be summed with one hot encoding
         all_augmented_inputs[t] = transformed_images
         all_preds[t] = preds
         # all_augmented_inputs[t*batch_size:(t+1)*batch_size] = transformed_images
@@ -239,20 +251,20 @@ def augmentAndPredict(model, images , k, num_classes, transforms, device):
     return all_augmented_inputs, all_preds
 
 if __name__ == "__main__":
-    labeled_img_id_to_annotations=parse_annotations(labeled_annotations)
-    labeled_data_saving_dir = "LabeledData/train"
-    num_labeled_images = len(labeled_images)
-    extractAllImages(range(num_labeled_images), labeled_img_id_to_annotations, labeled_annotations, labeled_images, path = labeled_path, saving_dir=labeled_data_saving_dir)
+    # labeled_img_id_to_annotations=parse_annotations(labeled_annotations)
+    # labeled_data_saving_dir = "LabeledData/train"
+    # num_labeled_images = len(labeled_images)
+    # extractAllImages(range(num_labeled_images), labeled_img_id_to_annotations, labeled_annotations, labeled_images, path = labeled_path, saving_dir=labeled_data_saving_dir)
 
-    labeled_valid_img_id_to_annotations=parse_annotations(labeled_valid_annotations)
-    labeled_valid_data_saving_dir = "LabeledData/valid"
-    num_labeled_valid_images = len(labeled_valid_images)
-    extractAllImages(range(num_labeled_valid_images), labeled_valid_img_id_to_annotations, labeled_valid_annotations, labeled_valid_images, path = labeled_valid_path, saving_dir=labeled_valid_data_saving_dir)
+    # labeled_valid_img_id_to_annotations=parse_annotations(labeled_valid_annotations)
+    # labeled_valid_data_saving_dir = "LabeledData/valid"
+    # num_labeled_valid_images = len(labeled_valid_images)
+    # extractAllImages(range(num_labeled_valid_images), labeled_valid_img_id_to_annotations, labeled_valid_annotations, labeled_valid_images, path = labeled_valid_path, saving_dir=labeled_valid_data_saving_dir)
     
-    labeled_test_img_id_to_annotations=parse_annotations(labeled_test_annotations)
-    labeled_test_data_saving_dir = "LabeledData/test"
-    num_labeled_test_images = len(labeled_test_images)
-    extractAllImages(range(num_labeled_test_images), labeled_test_img_id_to_annotations, labeled_test_annotations, labeled_test_images, path = labeled_test_path, saving_dir=labeled_test_data_saving_dir)
+    # labeled_test_img_id_to_annotations=parse_annotations(labeled_test_annotations)
+    # labeled_test_data_saving_dir = "LabeledData/test"
+    # num_labeled_test_images = len(labeled_test_images)
+    # extractAllImages(range(num_labeled_test_images), labeled_test_img_id_to_annotations, labeled_test_annotations, labeled_test_images, path = labeled_test_path, saving_dir=labeled_test_data_saving_dir)
 
     unlabeled_img_id_to_annotations=parse_annotations(unlabeled_annotations)
     unlabeled_data_saving_dir = "UnlabeledData/train"

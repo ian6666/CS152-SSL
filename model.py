@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 import custom_utils 
 import pdb
 import os
+import seaborn as sns
 
 classes = {0:"Crimp",
            1:"Jug",
@@ -26,8 +27,8 @@ def get_model(num_classes, lr):
     model = models.resnet18(pretrained=True)
     
     # Freeze the parameters of the model
-    for param in model.parameters():
-        param.requires_grad = False
+    # for param in model.parameters():
+    #     param.requires_grad = False
     
     model.avgpool = nn.AdaptiveAvgPool2d(output_size=(1,1))
     model.fc = nn.Sequential(
@@ -78,24 +79,99 @@ def accuracy(x, y, model):
 def predict(x, model):
     predictions = model(x)
     predicted_classes = torch.argmax(predictions, dim=1)
-    return predicted_classes, [classes[predicted_class] for predicted_class in predicted_classes]
+    return predicted_classes, [classes[predicted_class.item()] for predicted_class in predicted_classes]
 
-def predict_with_images(x, y, model, saving_dir):
+def predict_with_images(x, y, model, base_path, filenames, saving_dir):
     predicted_classes_num, class_names = predict(x, model)
     
-    for input in range(len(x)):
-        plt.imshow(input.permute([1,2,0]).detach().cpu())
-        plt.set_title(f'True: {classes[y[input].item()]}, Pred: {class_names[input]}')
+    for input_idx in range(len(x)):
+        with Image.open(os.path.join(base_path, filenames[input_idx])) as img:
+            plt.imshow(img)
+        # plt.imshow(x[input_idx].permute([1,2,0]).detach().cpu())
+        plt.title(f'True: {classes[y[input_idx].item()]}, Pred: {class_names[input_idx]}')
         plt.tight_layout()
-        filename = f'{input:05d}.png'
-        plt.savefig(os.path.join(saving_dir, filename), bbox_inches='tight')
+        # filename = f'{input_idx:05d}.png'
+        plt.savefig(os.path.join(saving_dir, f"pred_{filenames[input_idx]}"), bbox_inches='tight')
+        plt.close()
 
+def confusion_matrix(x, y, model, num_classes, saving_path):
+    predicted_classes_num, class_names = predict(x, model)
+    cm = confusion_matrix_helper(predicted_classes_num, y, num_classes, saving_path)
+    return cm
+    # confusion_matrix = torch.zeros((num_classes, num_classes))
+    # corrects = predicted_classes_num == y
+    # for sample_idx in range(len(corrects)):
+    #     confusion_matrix[y[sample_idx], predicted_classes_num[sample_idx]] += 1
+    
+    # if saving_dir:
+    #     plt.figure(figsize=(10, 8))
+    #     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=classes.values(), yticklabels=classes.values())
+    #     plt.title("Confusion Matrix")
+    #     plt.ylabel('True Class')
+    #     plt.xlabel('Predicted Class')
+    #     plt.xticks(rotation=45)
+    #     plt.yticks(rotation=45)
+    #     plt.savefig(f"{saving_dir}/confusion_matrix.png")
+    #     plt.close()
+
+    # return confusion_matrix
+
+def confusion_matrix_helper(predicted_classes_num, y, num_classes, saving_path):
+    confusion_matrix = torch.zeros((num_classes, num_classes))
+    corrects = predicted_classes_num == y
+    for sample_idx in range(len(corrects)):
+        confusion_matrix[y[sample_idx], predicted_classes_num[sample_idx]] += 1
+    
+    if saving_path:
+        plot_confusion_matrix(confusion_matrix, saving_path)
+
+    return confusion_matrix
+
+def plot_confusion_matrix(confusion_matrix, saving_path):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(confusion_matrix, annot=True, fmt="0.2f", cmap="Blues", xticklabels=classes.values(), yticklabels=classes.values())
+    plt.title("Confusion Matrix")
+    plt.ylabel('True Class')
+    plt.xlabel('Predicted Class')
+    plt.xticks(rotation=45)
+    plt.yticks(rotation=45)
+    plt.savefig(os.path.join(saving_path))
+    plt.close()
 
 def predict_proba(x, model):
     predictions = model(x)
     return torch.nn.functional.softmax(predictions)
 
 if __name__=="__main__":
+    # x = torch.tensor([1,2,3,4,0,4,3,1,2,3,4,1,2,0])
+    # y = torch.tensor([3,2,1,2,3,4,2,1,0,0,0,1,3,0])
+    # confusion_matrix_helper(x, y, 5, "./model_checkpoints/0/")
+
+    # prediction result?
+    # batch_size = 16
+    # labeled_annotations = custom_utils.get_annotations('ClimbingHoldDetection-15/train/_annotations.coco.json')
+    # labeled_dataloader = custom_utils.get_labeled_data("LabeledData/train", labeled_annotations, batch_size, False)
+    # model, loss_fn, optimizer = get_model(5,lr=1e-4)
+    # # state_dict = torch.load(os.path.join("model_checkpoints", "res_unfreeze", "best_model.pth"))
+    # # model.load_state_dict(state_dict)
+    # model.eval()
+    # labeled_val_dl_iter = iter(labeled_dataloader)
+    # predictions=[]
+    # for ix, batch in enumerate(labeled_val_dl_iter):
+    #     x, y = batch
+    #     x, y = x.to(device), y.to(device)
+    #     x = x.float()  # Convert to float
+    #     y = y.long()   # Convert to long for classification labels
+
+    #     prediction, _  = predict(x,model)
+    #     predictions = predictions + list(prediction)
+    # count = {0:0,1:0,2:0,3:0,4:0,5:0}
+    # for prediction in predictions:
+    #     count[prediction.item()]+=1
+    # print(count)
+
+            
+
     batch_size = 16
     labeled_annotations = custom_utils.get_annotations('ClimbingHoldDetection-15/train/_annotations.coco.json')
     labeled_dataloader = custom_utils.get_labeled_data("LabeledData/train", labeled_annotations, batch_size, False)
@@ -104,14 +180,17 @@ if __name__=="__main__":
     labeled_valid_dataloader = custom_utils.get_labeled_data("LabeledData/valid", labeled_valid_annotations, batch_size, False)
     model, loss_fn, optimizer = get_model(5,lr=1e-4)
 
+    # state_dict = torch.load(os.path.join("model_checkpoints", "res", "best_model.pth"))
+    # model.load_state_dict(state_dict)
+
     train_losses, train_accuracies = [], []
     val_losses, val_accuracies = [], []
-    n_epoch = 50
+    n_epoch = 100
 
     print("All losses and accuracies are for each epoch")
 
     max_accuracy = 0
-    savingPath = os.path.join("model_checkpoints", "res")
+    savingPath = os.path.join("model_checkpoints", "res_unfreeze")
     if not os.path.exists(savingPath):
         os.makedirs(savingPath)
     for epoch in range(n_epoch):
